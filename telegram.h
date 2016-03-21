@@ -165,14 +165,7 @@ char *response_str[2][7] = {
 			{NULL,"ok","false","error_code",NULL,"description",NULL}};
 int response_table[2][7] ={{1,3,0,3,1,-1,-1},{1,3,0,3,0,3,3}};
 int response_states[2][7] ={{2,2,1,2,3,-1,-1},{2,2,1,2,4,2,5}};
-
-
 char *user_str[] = {"id","first_name","last_name","username",NULL};
-/*
-char *user_str[] = {"id",NULL,"first_name",NULL,"username"};
-int user_table[] = {};
-int user_state[] = {};
-*/
 
 int telegram_init(char *);
 struct User * telegram_getMe();
