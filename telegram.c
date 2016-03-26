@@ -72,6 +72,7 @@ Response *telegram_parse_response(char *str,int *count)	{
 					break;
 					case 1:
 						response->description = value;
+						telegram_error_buffer = value;
 						entrar = 0;
 					break;
 					case 2:
@@ -80,6 +81,8 @@ Response *telegram_parse_response(char *str,int *count)	{
 					break;
 					case 3:
 						response->error_code = strtol(value,NULL,10);
+						telegram_error = 1;
+						telegram_error_code =  response->error_code;
 						free(value);
 					break;
 					default:
@@ -133,11 +136,8 @@ int telegram_set_error(char *error_str,int error_code)	{
 	telegram_error_buffer = error_str;
 	telegram_error_code = error_code;
 	telegram_error = 1;
-	exit(0);
 	return 0;
 }
-
-
 
 int telegram_free_response(Response *res)	{
 	if(res->ok != NULL)	{
@@ -307,7 +307,6 @@ int telegram_reset_buffer()	{
 	return 0;
 };
 
-
 size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata )	{
 	size_t new_len = telegram_buffer_offset + size*nmemb;
 	if(new_len >= telegram_buffer_size)	{
@@ -348,11 +347,14 @@ Updates * telegram_getUpdates()	{
 	}
 	else	{
 		response = telegram_parse_response(telegram_buffer,&i);
-		updates = telegram_parse_updates(response->result,&i);
+		if(!telegram_error)	{
+			if(response && response->result){
+				updates = telegram_parse_updates(response->result,&i);
+			}
+		}
 	}
 	return updates;
 }
-
 
 Updates * telegram_parse_updates(char *str,int *count)	{
 	Updates *updates;
@@ -693,18 +695,15 @@ Sticker* telegram_parse_sticker(char *str,int *count)	{
 	while(entrar && i < r)	{
 		switch(state)	{
 			case 0:
-				telegram_dump_token(toks[i],str);
 				state = message_states[state][toks[i].type];
 				i++;
 			break;
 			case 1:
-				telegram_dump_token(toks[i],str);
 				variable = telegram_jsmn_get_token(toks[i],str);
 				state = message_states[state][toks[i].type];
 				i++;
 			break;		
 			case 2:
-				telegram_dump_token(toks[i],str);
 				value = telegram_jsmn_get_token(toks[i],str);
 				state = message_states[state][toks[i].type];
 				switch(indexOf(variable,sticker_names))	{
@@ -1190,3 +1189,11 @@ int telegram_init(char *token)	{
 	}
 }
 
+char *telegram_get_error()	{
+	telegram_error = 0;
+	return telegram_error_buffer;
+}
+
+int telegram_is_error()	{
+	return telegram_error;
+}

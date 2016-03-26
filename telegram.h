@@ -153,6 +153,8 @@ int telegram_free_user(User *user);
 char * telegram_jsmn_get_token(jsmntok_t token,char *full);
 void telegram_dump_token(jsmntok_t token,char *str);
 char *telegram_makeurl(char *telegram_method);
+char *telegram_get_error();
+int telegram_is_error();
 
 CURL *curl;
 CURLcode res;
