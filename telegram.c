@@ -1,39 +1,228 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<curl/curl.h>
+#include<sys/stat.h>
+#include<errno.h>
 #include"telegram.h"
+#include"jsmn.h"
 
-char *response_str[2][7] = {
-			{NULL,"ok","true","result",NULL,NULL,NULL},
-			{NULL,"ok","false","error_code",NULL,"description",NULL}};
-int response_table[2][7] ={{1,3,0,3,1,-1,-1},{1,3,0,3,0,3,3}};
-int response_states[2][7] ={{2,2,1,2,3,-1,-1},{2,2,1,2,4,2,5}};
-char *user_str[] = {"id","first_name","last_name","username",NULL};
 
-int telegram_init(char *);
-struct User * telegram_getMe();
-char *telegram_makeurl(char *);
-size_t write_callback(void *, size_t , size_t , void *);
-char * jsmn_getTokenStr(jsmntok_t);
-int telegram_parse_result();
-struct User * telegram_parse_user();
-int telegram_reset_buffer();
-int telegram_setError(char *,int);
-int indexOf(char *,char **);
-void telegram_dump_user(struct User *);
-void telegram_dump_token(jsmntok_t token);
-
-char *telegram_token;
-char *telegram_baseurl = "https://api.telegram.org/bot";
 char *telegram_buffer;
 int telegram_buffer_size = 1024;
 int telegram_buffer_offset = 0;
+char *telegram_baseurl = "https://api.telegram.org/bot";
+char *telegram_token;
 int telegram_error = 0;
 int telegram_error_code = 0;
 char *telegram_error_buffer;
 
-jsmntok_t *tokens;
-jsmn_parser parser;
+char *message_names[] = {"message_id","from","date","chat",
+"forward_from","forward_date","reply_to_message",
+"text","audio","document","photo","sticker","video",
+"voice","caption","contact","location",
+"new_chat_participant","left_chat_participant",
+"new_chat_title","new_chat_photo","delete_chat_photo",
+"group_chat_created","supergroup_chat_created","channel_chat_created","migrate_to_chat_id","migrate_from_chat_id",NULL};
+char *contact_names[] = {"phone_number","first_name","last_name","user_id",NULL};
+char *chat_names[] = {"id","type","title","username","first_name","last_name",NULL};
+char *chat_type_names[] = {"private","group","supergroup","channel",NULL};
+char *sticker_names[] = {"file_id","width","height","thumb","file_size",NULL};
+char *photosize_names[] = {"file_id","width","height","file_size",NULL};
+char *voice_names[] = {"file_id","duration","mime_type","file_size",NULL};
+char *location_names[] = {"longitude","latitude",NULL};
+char *document_names[] = {"file_id","thumb","file_name","mime_type","file_size",NULL};
+char *video_names[] = {"file_id","width","height","duration","thumb","mime_type","file_size",NULL};
+char *response_names[] = {"ok","description","result","error_code",NULL};
+char *user_names[] = {"id","first_name","last_name","username",NULL};
+char *update_names[] = {"update_id","message","inline_query","chosen_inline_result",NULL};
 
-CURL *curl;
-CURLcode res;
+int message_states[3][5] = {{4,1,4,4,4},{4,4,4,2,4},{4,1,1,1,1}};
+int parse_array_states[2][5] = {{4,4,1,4,4},{4,1,4,4,4}};
+
+
+Response *telegram_parse_response(char *str,int *count)	{
+	Response *response;
+	int r,n =1,c,i =0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	response = calloc(1,sizeof(Response));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+				switch(indexOf(variable,response_names))	{
+					case 0:
+						response->ok = value;
+					break;
+					case 1:
+						response->description = value;
+						entrar = 0;
+					break;
+					case 2:
+						response->result = value;
+						entrar = 0;
+					break;
+					case 3:
+						response->error_code = strtol(value,NULL,10);
+						free(value);
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 3:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+			default:
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return response;
+}
+
+
+int telegram_jsmn_init(jsmn_parser *parser,jsmntok_t **t,char *buffer,int *n)	{
+	int r;
+	jsmntok_t *toks;
+	jsmn_init(parser);
+	toks = calloc(n[0],sizeof(jsmntok_t));
+	if(toks != NULL)	{
+		r = jsmn_parse(parser, buffer, strlen(buffer), toks, n[0]);
+		while (r == JSMN_ERROR_NOMEM)	{
+			n[0]*=2;
+			toks = realloc(toks, sizeof(jsmntok_t) * n[0]);
+			r = jsmn_parse(parser, buffer, strlen(buffer), toks, n[0]);
+		}
+		if (r == JSMN_ERROR_INVAL)	{
+			telegram_set_error("jsmn_parse: invalid JSON string",JSMN_ERROR_INVAL);
+		}
+		if (r == JSMN_ERROR_PART)	{
+			telegram_set_error("jsmn_parse: truncated JSON string",JSMN_ERROR_PART);
+		}
+		t[0] = toks;
+	}
+	else	{
+		telegram_set_error("calloc: error",0xDEAD);
+	}
+	return r;
+}
+
+int telegram_set_error(char *error_str,int error_code)	{
+	telegram_error_buffer = error_str;
+	telegram_error_code = error_code;
+	telegram_error = 1;
+	exit(0);
+	return 0;
+}
+
+
+
+int telegram_free_response(Response *res)	{
+	if(res->ok != NULL)	{
+		free(res->ok);
+	}
+	if(res->result != NULL)	{
+		free(res->result);
+	}
+	if(res->description != NULL )	{
+		free(res->description);
+	}
+	res->error_code = 0;
+	free(res);
+	return 0;
+}
+
+int telegram_free_user(User *user)	{
+	if(user->username != NULL)	{
+		free(user->username);
+	}
+	if(user->first_name != NULL)	{
+		free(user->first_name);
+	}
+	if(user->last_name != NULL)	{
+		free(user->last_name);
+	}
+	user->id = 0;
+	free(user);
+	return 0;
+}
+
+int indexOf(char *str,char **ptr_strings)	{
+	int i = 0,entrar = 1;
+	while(entrar && ptr_strings[i] != NULL )	{
+		if(strcmp(ptr_strings[i],str) == 0)	{
+			entrar = 0;
+			i--;
+		}
+		i++;
+	}
+	if(entrar)	{
+		i = -1;
+	}
+	return i;
+}
+
+char * telegram_jsmn_get_token(jsmntok_t token,char *full)	{
+	char *str;
+	int size = token.end - token.start;
+	str = calloc(size+2,sizeof(char));
+	memcpy(str,full+token.start,size);
+	return str;
+}
+
+void telegram_dump_token(jsmntok_t token,char *str)	{
+	char *temp;
+	temp = telegram_jsmn_get_token(token,str);
+	printf("Token: %s\n",temp);
+	free(temp);
+	printf("type: %i\n",token.type);
+	printf("start: %i\n",token.start);
+	printf("end: %i\n",token.end);
+	printf("size: %i\n",token.size);
+#ifdef JSMN_PARENT_LINKS	
+	printf("size: %i\n",token.parent);
+#endif
+}
+
+User * telegram_getMe()	{
+	Response *response = NULL;
+	User *user = NULL;
+	char *url = NULL;
+	int i;
+	url = telegram_makeurl("/getMe");
+	curl_easy_setopt(curl, CURLOPT_URL, url);
+	res = curl_easy_perform(curl);
+	free(url);
+	if(res != CURLE_OK)	{
+		fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
+	}
+	response = telegram_parse_response(telegram_buffer,&i);
+	user = telegram_parse_user(response->result,&i);
+	telegram_reset_buffer();
+	return user;
+}
 
 char *telegram_makeurl(char *telegram_method)	{
 	char *url;
@@ -54,6 +243,925 @@ char *telegram_makeurl(char *telegram_method)	{
 		exit(1);
 	}
 	return url;
+}
+
+User* telegram_parse_user(char *str,int *count)	{
+	User *user;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	char *token,*token1;
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	user = calloc(1,sizeof(User));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+				switch(indexOf(variable,user_names))	{
+					case 0:
+						user->id = strtol(value,NULL,10);
+						free(value);
+					break;
+					case 1:
+						user->first_name = value;
+					break;
+					case 2:
+						user->last_name = value;
+					break;
+					case 3:
+						user->username = value;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 3:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0] += r;
+	return user;
+}
+
+int telegram_reset_buffer()	{
+	memset(telegram_buffer,0,telegram_buffer_size);
+	telegram_buffer_offset = 0;
+	return 0;
+};
+
+
+size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata )	{
+	size_t new_len = telegram_buffer_offset + size*nmemb;
+	if(new_len >= telegram_buffer_size)	{
+		do	{
+			telegram_buffer_size*=2;
+		}while(new_len >= telegram_buffer_size);
+		telegram_buffer = realloc(telegram_buffer, (telegram_buffer_size +1)*sizeof(char));
+		if (telegram_buffer == NULL) {
+			fprintf(stderr, "realloc() failed\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+	memcpy(telegram_buffer + telegram_buffer_offset, ptr, size*nmemb);
+	telegram_buffer[new_len] = '\0';
+	telegram_buffer_offset+= size*nmemb;
+	return size*nmemb;
+}
+
+off_t fsize(const char *filename) {
+	struct stat st;
+	if (stat(filename, &st) == 0)
+		return st.st_size;
+	fprintf(stderr, "Cannot determine size of %s: %s\n",filename, strerror(errno));
+	return -1;
+}
+
+Updates * telegram_getUpdates()	{
+	Response *response = NULL;
+	Updates *updates = NULL;
+	char *url = telegram_makeurl("/getUpdates");
+	int i;
+	curl_easy_setopt(curl, CURLOPT_URL, url);
+	res = curl_easy_perform(curl);
+	free(url);
+	if(res != CURLE_OK)	{
+		telegram_set_error("jsmn_parse: truncated JSON string",JSMN_ERROR_INVAL);
+		fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
+	}
+	else	{
+		response = telegram_parse_response(telegram_buffer,&i);
+		updates = telegram_parse_updates(response->result,&i);
+	}
+	return updates;
+}
+
+
+Updates * telegram_parse_updates(char *str,int *count)	{
+	Updates *updates;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *value;
+	updates = calloc(1,sizeof(Updates));
+	updates->list = calloc(1,sizeof(Update*));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = parse_array_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = parse_array_states[state][toks[i].type];
+				updates->list[updates->length] = telegram_parse_update(value,&i);
+				updates->length++;
+				updates->list = realloc(updates->list,(updates->length+1)*sizeof(Update *));
+			break;
+			case 4:
+				telegram_dump_token(toks[i],str);
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r; 
+	return updates;
+}
+
+Update * telegram_parse_update(char *str,int *count)	{
+	Update *update = NULL;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	update = calloc(1,sizeof(Update));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				switch(indexOf(variable,update_names))	{
+					case 0:
+						update->update_id = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 1:
+						update->item.message = telegram_parse_message(value,&i);
+						free(value);
+					break;
+					case 2:
+					case 3:
+						telegram_set_error("Fixme",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						free(value);
+						entrar = 0;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 3:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+			default:
+			break;
+		}
+
+	}
+	free(toks);
+	count[0]+= r;	
+	return update;
+}
+
+Message* telegram_parse_message(char *str,int *count)	{
+	Message *message;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	message = calloc(1,sizeof(Message));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,message_names);
+				switch(c)	{
+					case 0: //message_id
+						message->message_id = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 1: //from
+						message->from = telegram_parse_user(value,&i);
+						free(value);
+					break; 
+					case 2: //date
+						message->date = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 3:	//chat
+						message->chat= telegram_parse_chat(value,&i);
+						free(value);
+					break;
+					case 4:	//forward_from
+						message->forward_from = telegram_parse_user(value,&i);
+						free(value);
+					break;
+					case 5:	//forward_date
+						message->forward_date = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 6:	//reply_to_message
+						message->reply_to_message = telegram_parse_message(value,&i);
+						free(value);
+					break;
+					case 7:	//text
+						message->text = value;
+						i++;
+					break;
+					case 8:	//audio
+						printf("error with token %s\n",value);
+						entrar = 0;
+						free(value);
+						i++;
+					break;
+					case 9:	//document
+						message->document = telegram_parse_document(value,&i);
+						free(value);
+					break;
+					case 10: //photo
+						message->photo = telegram_parse_photos(value,&i);
+						free(value);
+					break;
+					case 11:	
+
+						message->sticker = telegram_parse_sticker(value,&i);
+						free(value);
+					break;
+					case 12:	//video
+						message->video = telegram_parse_video(value,&i);
+					break;
+					case 13:	//voice
+						message->voice = telegram_parse_voice(value,&i);
+						free(value);
+					break;
+					case 14:	//Cption
+						message->caption = value;
+						i++;
+					break;
+					case 15:	//contact
+						message->contact = telegram_parse_contact(value,&i);
+						free(value);
+					break;
+					case 16:	//location
+						message->location = telegram_parse_location(value,&i);
+						free(value);
+					break;
+					case 17:	//new_chat_participant
+						message->new_chat_participant = telegram_parse_user(value,&i);
+						free(value);
+					break;
+					case 18:	//left_chat_participant
+						message->left_chat_participant = telegram_parse_user(value,&i);
+						free(value);
+					break;
+					case 19:	//new_chat_title
+						message->new_chat_title = value;
+						i++;
+					break;
+					case 20:	//new_chat_photo
+						message->new_chat_photo = telegram_parse_photos(value,&i);
+						free(value);
+					break;
+					case 21:	//delete_chat_photo
+						message->delete_chat_photo = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 22:	//group_chat_created
+						message->group_chat_created = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 23:	//supergroup_chat_created
+						message->supergroup_chat_created = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 24:	//channel_chat_created
+						message->channel_chat_created = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 25:	//migrate_to_chat_id
+						message->migrate_to_chat_id = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 26:	//migrate_from_chat_id
+						message->migrate_from_chat_id = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+			default:
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return message;
+}
+
+Chat* telegram_parse_chat(char *str,int  *count)	{
+	Chat *chat = NULL;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	chat = calloc(1,sizeof(Chat));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+				switch(indexOf(variable,chat_names))	{
+					case 0: 
+						chat->id = strtol(value,NULL,10);
+						free(value);
+					break;
+					case 1:
+						chat->type = indexOf(variable,chat_type_names);
+					break; 
+					case 2: 
+						chat->title = value;
+					break;
+					case 3: 
+						chat->username = value;
+					break;
+					case 4: 
+						chat->first_name = value;
+					break;
+					case 5: 
+						chat->last_name = value;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+
+		}
+	}
+	free(toks);
+	count[0]+=r;
+ 	return chat;	
+}
+
+Sticker* telegram_parse_sticker(char *str,int *count)	{
+	Sticker *sticker = NULL;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	sticker = calloc(1,sizeof(Sticker));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				telegram_dump_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				telegram_dump_token(toks[i],str);
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				telegram_dump_token(toks[i],str);
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				switch(indexOf(variable,sticker_names))	{
+					case 0: 
+						sticker->file_id = value;
+						i++;
+					break;
+					case 1:
+						sticker->width = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break; 
+					case 2: 
+						sticker->height = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 3: 
+						sticker->thumb = telegram_parse_photosize(value,&i);
+						free(value);
+					break;
+					case 4:
+						sticker->file_size = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return sticker;
+}
+
+PhotoSize* telegram_parse_photosize(char *str,int *count)	{
+	PhotoSize *photosize;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	photosize = calloc(1,sizeof(PhotoSize));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,photosize_names);
+				switch(c)	{
+					case 0: 
+						photosize->file_id = value;
+						i++;
+					break;
+					case 1:
+						photosize->width = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break; 
+					case 2: 
+						photosize->height = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 3:
+						photosize->file_size = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return photosize;
+}
+
+Photos* telegram_parse_photos(char *str,int *count)	{
+	Photos *photos = NULL;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *value;
+	photos = calloc(1,sizeof(Photos));
+	photos->item = calloc(1,sizeof(PhotoSize *));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = parse_array_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = parse_array_states[state][toks[i].type];
+				photos->item[photos->length] = telegram_parse_photosize(value,&i);
+				photos->length++;
+				photos->item = realloc(photos->item,photos->length+1 * sizeof(PhotoSize*));
+			break;		
+			case 4:
+				telegram_dump_token(toks[i],str);
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+= r;
+	return photos;
+
+}
+
+Voice* telegram_parse_voice(char *str,int *count)	{
+	Voice *voice;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	voice = calloc(1,sizeof(Voice));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,voice_names);
+				i++;
+				switch(c)	{
+					case 0: 
+						voice->file_id = value;
+					break;
+					case 1:
+						voice->duration = strtol(value,NULL,10);
+						free(value);
+					break; 
+					case 2: 
+						voice->mime_type = value;
+;
+					case 3:
+						voice->file_size = strtol(value,NULL,10);
+						free(value);
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return voice;
+}
+
+Location* telegram_parse_location(char *str,int *count)	{
+	Location *location;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	location = calloc(1,sizeof(Location));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,location_names);
+				i++;
+				switch(c)	{
+					case 0: 
+						location->longitude = strtof(value,NULL);
+					break;
+					case 1:
+						location->latitude = strtof(value,NULL);
+					break; 
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(value);
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return location;
+}
+
+Contact* telegram_parse_contact(char *str,int *count)	{
+	Contact *contact;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	contact = calloc(1,sizeof(Contact));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,contact_names);
+				i++;
+				switch(c)	{
+					case 0: 
+						contact->phone_number = value;
+					break;
+					case 1:
+						contact->first_name = value;
+					break;
+					case 2:
+						contact->last_name = value;
+					break;
+
+					case 3:
+						contact->user_id = strtol(value,NULL,10);
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return contact;
+}
+
+
+Document* telegram_parse_document(char *str,int *count)	{
+	Document *document;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	document = calloc(1,sizeof(Document));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,document_names);
+				switch(c)	{
+					case 0: 
+						document->file_id = value;
+						i++;
+					break;
+					case 1:
+						document->thumb = telegram_parse_photosize(value,&i);
+						free(value);
+					break;
+					case 2:
+						document->file_name = value;
+						i++;
+					break;
+
+					case 3:
+						document->mime_type = value;
+						i++;
+					break;
+
+					case 4:
+						document->file_size = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return document;
+}
+
+Video * telegram_parse_video(char *str,int *count)	{
+	Video *video;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	video = calloc(1,sizeof(Video));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,video_names);
+				switch(c)	{
+					case 0: 
+						video->file_id = value;
+						i++;
+					break;
+					case 1:
+						video->width = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 2:
+						video->height = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 3:
+						video->duration = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 4:
+						video->thumb = telegram_parse_photosize(value,&i);
+						free(value);
+					break;
+					case 5:
+						video->mime_type = value;
+						free(value);
+						i++;
+					break;
+					case 6:
+						video->file_size = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return video;
 }
 
 int telegram_init(char *token)	{
@@ -82,290 +1190,3 @@ int telegram_init(char *token)	{
 	}
 }
 
-int telegram_end()	{
-	memset(telegram_token,0,strlen(telegram_token));
-	free(telegram_buffer);
-	free(telegram_token);
-	curl_global_cleanup();
-	return 0;
-}
-
-struct User * telegram_getMe()	{
-	struct User *user = NULL;
-	char *url = telegram_makeurl("/getMe");
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-	res = curl_easy_perform(curl);
-	free(url);
-	if(res != CURLE_OK)	{
-		fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
-	}
-	jsmn_init(&parser);
-	if(telegram_parse_result() == 0){
-		user = telegram_parse_user();
-		//telegram_dump_user(user);
-	}
-	telegram_reset_buffer();
-	return user;
-}
-
-struct User * telegram_getUpdates()	{
-	struct User *user = NULL;
-	char *url = telegram_makeurl("/getUpdates");
-	//printf("%s\n",url);
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-	res = curl_easy_perform(curl);
-	free(url);
-	if(res != CURLE_OK)	{
-		fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
-	}
-	jsmn_init(&parser);
-	telegram_parse_result();
-	telegram_reset_buffer();
-	return user;
-}
-
-int telegram_reset_buffer()	{
-	memset(telegram_buffer,0,telegram_buffer_size);
-	telegram_buffer_offset = 0;
-	return 0;
-};
-
-int telegram_parse_result()	{
-	int r;
-	int code;
-	unsigned int n =1,i = 0,state,entrar;
-	char *token;
-	tokens = calloc(n,sizeof(jsmntok_t));
-	r = jsmn_parse(&parser, telegram_buffer, telegram_buffer_offset, tokens, n);
-	while (r == JSMN_ERROR_NOMEM)	{
-		n*=2;
-		tokens = realloc(tokens, sizeof(jsmntok_t) * n);
-		r = jsmn_parse(&parser, telegram_buffer, telegram_buffer_offset, tokens, n);
-	}
-	if (r == JSMN_ERROR_INVAL)	{
-		telegram_setError("jsmn_parse: invalid JSON string",JSMN_ERROR_INVAL);
-	}
-	if (r == JSMN_ERROR_PART)	{
-		telegram_setError("jsmn_parse: truncated JSON string",JSMN_ERROR_INVAL);
-	}
-	state = 0;
-	entrar = 1;
-	while(entrar && i< 7)	{
-		switch(response_states[state][i])	{
-			case 1:	//if token string mismach change of state to 1
-				if(tokens[i].type == response_table[state][i]){
-					token = jsmn_getTokenStr(tokens[i]);
-					if(strcmp(token,response_str[state][i]) != 0)	{
-						state = 1;
-					}				
-					free(token);
-				}
-				else	{
-					telegram_setError("Unexpect token type",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
-					entrar = 0;
-				}
-			break;
-			case 2:	//Compare token.type and string compare
-				if(tokens[i].type == response_table[state][i]){
-					if(response_str[state][i] != NULL)	{
-						token = jsmn_getTokenStr(tokens[i]);
-						if(strcmp(token,response_str[state][i]) != 0)	{
-							printf("Token mismatch: %s != %s\n",token,response_str[state][i]);
-							telegram_setError("Unexpect token value",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
-							entrar = 0;
-						}				
-						free(token);
-					}
-				}
-				else	{
-					telegram_setError("Unexpect token type",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
-					entrar = 0;
-				}
-			break;
-			case 3: //Return Object Token in telegram buffer, end while
-				if(tokens[i].type == response_table[state][i]){
-					token = jsmn_getTokenStr(tokens[i]);
-					memset(telegram_buffer,0,telegram_buffer_size);
-					memcpy(telegram_buffer,token,strlen(token));			
-					free(token);
-					telegram_buffer_offset = strlen(token);
-					telegram_error = 0;
-					entrar = 0;
-				}
-				else	{
-					telegram_setError("Unexpect token type",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
-					entrar = 0;
-				}
-			break;
-			case 4: //mov token int value to error code
-				if(tokens[i].type == response_table[state][i]){
-					token = jsmn_getTokenStr(tokens[i]);
-					telegram_error_code = strtol(token,NULL,10);
-					free(token);
-					telegram_error = 1;
-				}
-				else	{
-					telegram_setError("Unexpect token type",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
-					entrar = 0;
-				}
-			break;
-			case 5: //mov token string value to error ptr
-				if(tokens[i].type == response_table[state][i]){
-					token = jsmn_getTokenStr(tokens[i]);
-					telegram_setError(token,telegram_error_code);
-					entrar = 0;
-				}
-				else	{
-					telegram_setError("Unexpect token type",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
-					entrar = 0;
-				}
-			break;
-		}
-		i++;
-	}
-	memset(tokens,0,n*sizeof(jsmntok_t));
-	free(tokens);
-	return telegram_error;
-}
-
-struct User * telegram_parse_user()	{
-	struct User *user;
-	int r,i,n = 1;
-	char *token,*token1;
-	jsmn_init(&parser);
-	user = calloc(1,sizeof(struct User));
-	tokens = calloc(n,sizeof(jsmntok_t));
-	if(user == NULL)	{
-		telegram_setError("calloc: error",0xDEAD);
-	}
-	if(tokens == NULL)	{
-		telegram_setError("calloc: error",0xDEAD);
-	}
-	r = jsmn_parse(&parser, telegram_buffer, telegram_buffer_offset, tokens, n);
-	while (r == JSMN_ERROR_NOMEM)	{
-		//telegram_setError("offset",telegram_buffer_offset);
-		n*=2;
-		tokens = realloc(tokens, sizeof(jsmntok_t) * n);
-		r = jsmn_parse(&parser, telegram_buffer, telegram_buffer_offset, tokens, n);
-	}
-	if (r == JSMN_ERROR_INVAL)	{
-		telegram_setError("jsmn_parse: invalid JSON string",JSMN_ERROR_INVAL);
-	}
-	if (r == JSMN_ERROR_PART)	{
-		telegram_setError("jsmn_parse: truncated JSON string",JSMN_ERROR_INVAL);
-	}
-	if(tokens == NULL)	{
-		telegram_setError("calloc: error",0xDEAD);
-	}
-	i = 1;
-	while(tokens[i].end != 0 && tokens[i].size != 0)	{
-		//telegram_setError("While in",0xDEAD);
-		//telegram_dump_token(tokens[i]);
-		token = jsmn_getTokenStr(tokens[i]);
-		i++;
-		//printf("Token: %s\n",token);
-		switch(indexOf(token,user_str))	{
-			case 0:	//Is ID
-				//telegram_setError("Debug",0);
-				token1 = jsmn_getTokenStr(tokens[i]);
-				user->id = strtol(token1,NULL,10);
-				free(token1);
-			break;
-			case 1:	//fistname
-				//telegram_setError("Debug",1);
-				token1 = jsmn_getTokenStr(tokens[i]);
-				user->first_name = token1;
-			break;
-			case 2:	//lastname
-				//telegram_setError("Debug",2);
-				token1 = jsmn_getTokenStr(tokens[i]);
-				user->last_name = token1;
-			break;
-			case 3:	//username
-				//telegram_setError("Debug",3);
-				token1 = jsmn_getTokenStr(tokens[i]);
-				user->username = token1;
-			break;
-			default:
-				telegram_setError("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
-			break;
-		}
-		i++;
-		free(token);
-	}
-	//telegram_dump_user(user);
-	return user;
-}
-
-int indexOf(char *str,char **ptr_strings)	{
-	int i = 0,entrar = 1;
-	while(entrar && ptr_strings[i] != NULL )	{
-		//printf("Buscando %s en %s\n",str,ptr_strings[i]);
-		if(strcmp(ptr_strings[i],str) == 0)	{
-			//printf("encontrado en index: %i\n",i);
-			entrar = 0;
-			i--;
-		}
-		i++;
-	}
-	if(entrar)	{
-		i = -1;
-	}
-	return i;
-}
-
-int telegram_setError(char *error_str,int error_code)	{
-	printf("%i : %s\n",error_code,error_str);
-	telegram_error_buffer = error_str;
-	telegram_error_code = error_code;
-	telegram_error = 1;
-	return 0;
-}
-
-char * jsmn_getTokenStr(jsmntok_t token)	{
-	char *str;
-	int size = token.end - token.start;
-	str = calloc(size+1,sizeof(char));
-	memcpy(str,telegram_buffer+token.start,size);
-	return str;
-}
-
-size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata )	{
-	//printf("offset actual %i\n",telegram_buffer_offset);
-	size_t new_len = telegram_buffer_offset + size*nmemb;
-	if(new_len >= telegram_buffer_size)	{
-		do	{
-			telegram_buffer_size*=2;
-		}while(new_len >= telegram_buffer_size);
-		telegram_buffer = realloc(telegram_buffer, telegram_buffer_size +1);
-		if (telegram_buffer == NULL) {
-			fprintf(stderr, "realloc() failed\n");
-			exit(EXIT_FAILURE);
-		}
-	}
-	memcpy(telegram_buffer + telegram_buffer_offset, ptr, size*nmemb);
-	telegram_buffer[new_len] = '\0';
-	telegram_buffer_offset+= size*nmemb;
-	//printf("offset actual %i\n",telegram_buffer_offset);
-	//printf("buffer actual %i\n",telegram_buffer_size);
-	return size*nmemb;
-}
-
-void telegram_dump_user(struct User *user)	{
-	printf("id: %i\n",user->id);
-	printf("first_name: %s\n",user->first_name);
-	printf("last_name: %s\n",user->last_name);
-	printf("username: %s\n",user->username);
-	
-}
-
-void telegram_dump_token(jsmntok_t token)	{
-	printf("type: %i\n",token.type);
-	printf("start: %i\n",token.start);
-	printf("end: %i\n",token.end);
-	printf("size: %i\n",token.size);
-#ifdef JSMN_PARENT_LINKS	
-	printf("size: %i\n",token.parent);
-#endif
-
-}
