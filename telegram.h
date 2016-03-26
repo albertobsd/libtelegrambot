@@ -113,7 +113,6 @@ typedef struct Message {
 	int migrate_from_chat_id;
 }Message;
 
-
 typedef struct	{
 	char *ok;
 	char *result;
@@ -141,7 +140,6 @@ typedef enum {
 	TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE = -40,
 	TELEGRAM_ERROR_API_404 = 404
 }telegram_error_t;
-
 
 
 int telegram_init(char *);

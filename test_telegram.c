@@ -9,8 +9,16 @@
 
 int main()	{
 	Updates *updates;
+	User *user;
 	int i = 0;
-	telegram_init("123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11");
+	telegram_init("0123456789:qwertyuiopdfghjkl");
+	user = telegram_getMe();
+	if(!telegram_is_error())	{
+		printf("User: id: %i\nusername: %s\n",user->id,user->username);
+	}
+	else	{
+		printf("%s\n",telegram_get_error());
+	}
 	updates = telegram_getUpdates();
 	if(!telegram_is_error()){
 		printf("updates: %i\n",updates->length);
@@ -20,7 +28,7 @@ int main()	{
 		}
 	}
 	else	{
-		printf("%s",telegram_get_error());
+		printf("%s\n",telegram_get_error());
 	}
 	return 0;
 }

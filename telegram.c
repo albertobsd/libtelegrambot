@@ -72,7 +72,8 @@ Response *telegram_parse_response(char *str,int *count)	{
 					break;
 					case 1:
 						response->description = value;
-						telegram_error_buffer = value;
+						telegram_error_buffer = calloc(strlen(value)+1,sizeof(char));
+						memcpy(telegram_error_buffer,value,strlen(value)*sizeof(char));
 						entrar = 0;
 					break;
 					case 2:
@@ -140,17 +141,19 @@ int telegram_set_error(char *error_str,int error_code)	{
 }
 
 int telegram_free_response(Response *res)	{
-	if(res->ok != NULL)	{
-		free(res->ok);
+	if(res)	{
+		if(res->ok)	{
+			free(res->ok);
+		}
+		if(res->result)	{
+			free(res->result);
+		}
+		if(res->description)	{
+			free(res->description);
+		}
+		res->error_code = 0;
+		free(res);
 	}
-	if(res->result != NULL)	{
-		free(res->result);
-	}
-	if(res->description != NULL )	{
-		free(res->description);
-	}
-	res->error_code = 0;
-	free(res);
 	return 0;
 }
 
@@ -206,7 +209,7 @@ void telegram_dump_token(jsmntok_t token,char *str)	{
 #endif
 }
 
-User * telegram_getMe()	{
+User* telegram_getMe()	{
 	Response *response = NULL;
 	User *user = NULL;
 	char *url = NULL;
@@ -219,7 +222,10 @@ User * telegram_getMe()	{
 		fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
 	}
 	response = telegram_parse_response(telegram_buffer,&i);
-	user = telegram_parse_user(response->result,&i);
+	if(!telegram_error)	{
+		user = telegram_parse_user(response->result,&i);
+	}
+	telegram_free_response(response);
 	telegram_reset_buffer();
 	return user;
 }
@@ -352,6 +358,7 @@ Updates * telegram_getUpdates()	{
 				updates = telegram_parse_updates(response->result,&i);
 			}
 		}
+		telegram_free_response(response);
 	}
 	return updates;
 }
@@ -1197,3 +1204,4 @@ char *telegram_get_error()	{
 int telegram_is_error()	{
 	return telegram_error;
 }
+
