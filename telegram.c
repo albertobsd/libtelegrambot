@@ -7,6 +7,7 @@
 #include"telegram.h"
 #include"jsmn.h"
 
+
 char *telegram_buffer;
 int telegram_buffer_size = 1024;
 int telegram_buffer_offset = 0;
@@ -47,10 +48,10 @@ Response *telegram_parse_response(char *str,int *count)	{
 	int r,n =1,c,i =0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	response = calloc(1,sizeof(Response));
+	response = calloc(2,sizeof(Response));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+2,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -73,7 +74,7 @@ Response *telegram_parse_response(char *str,int *count)	{
 					break;
 					case 1:
 						response->description = value;
-						telegram_error_buffer = calloc(strlen(value)+1,sizeof(char));
+						telegram_error_buffer = calloc(strlen(value)+2,sizeof(char));
 						memcpy(telegram_error_buffer,value,strlen(value)*sizeof(char));
 						entrar = 0;
 					break;
@@ -112,12 +113,12 @@ int telegram_jsmn_init(jsmn_parser *parser,jsmntok_t **t,char *buffer,int *n)	{
 	int r;
 	jsmntok_t *toks;
 	jsmn_init(parser);
-	toks = calloc(n[0],sizeof(jsmntok_t));
+	toks = calloc(n[0]+2,sizeof(jsmntok_t));
 	if(toks != NULL)	{
 		r = jsmn_parse(parser, buffer, strlen(buffer), toks, n[0]);
 		while (r == JSMN_ERROR_NOMEM)	{
 			n[0]*=2;
-			toks = realloc(toks, sizeof(jsmntok_t) * n[0]);
+			toks = realloc(toks, sizeof(jsmntok_t) * (n[0] + 2));
 			r = jsmn_parse(parser, buffer, strlen(buffer), toks, n[0]);
 		}
 		if (r == JSMN_ERROR_INVAL)	{
@@ -245,7 +246,6 @@ File* telegram_getFile(char *file_id)	{
 	char *variables[] = {"file_id",NULL};
 	char *values[] = {file_id,NULL};
 	int i;
-	//printf("entrando %s\n",file_id);
 	if(file_id){
 		curl = telegram_curl_init();
 		url = telegram_makeurl("/getFile");
@@ -284,7 +284,7 @@ char *telegram_makeurl(char *telegram_method)	{
 	size_token = strlen(telegram_token);
 	size_method = strlen(telegram_method);
 	l = size_base + size_token + size_method;
-	url = calloc(l+10,sizeof(char));
+	url = calloc(l+2,sizeof(char));
 	if(url != NULL)	{
 		snprintf(url,l+1,"%s%s%s",telegram_baseurl,telegram_token,telegram_method);
 	}
@@ -303,7 +303,7 @@ User* telegram_parse_user(char *str,int *count)	{
 	char *token,*token1;
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	user = calloc(1,sizeof(User));
+	user = calloc(2,sizeof(User));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -363,7 +363,7 @@ size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata )	{
 		do	{
 			telegram_buffer_size*=2;
 		}while(new_len >= telegram_buffer_size);
-		telegram_buffer = realloc(telegram_buffer, (telegram_buffer_size +1)*sizeof(char));
+		telegram_buffer = realloc(telegram_buffer, (telegram_buffer_size +2)*sizeof(char));
 		if (telegram_buffer == NULL) {
 			fprintf(stderr, "realloc() failed\n");
 			exit(EXIT_FAILURE);
@@ -416,11 +416,11 @@ Updates * telegram_parse_updates(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *value;
-	updates = calloc(1,sizeof(Updates));
-	updates->list = calloc(1,sizeof(Update*));
+	updates = calloc(2,sizeof(Updates));
+	updates->list = calloc(2,sizeof(Update*));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+2,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -433,7 +433,7 @@ Updates * telegram_parse_updates(char *str,int *count)	{
 				state = parse_array_states[state][toks[i].type];
 				updates->list[updates->length] = telegram_parse_update(value,&i);
 				updates->length++;
-				updates->list = realloc(updates->list,(updates->length+1)*sizeof(Update *));
+				updates->list = realloc(updates->list,(updates->length+2)*sizeof(Update *));
 			break;
 			case 4:
 				telegram_dump_token(toks[i],str);
@@ -452,10 +452,10 @@ Update * telegram_parse_update(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	update = calloc(1,sizeof(Update));
+	update = calloc(2,sizeof(Update));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -513,10 +513,10 @@ Message* telegram_parse_message(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	message = calloc(1,sizeof(Message));
+	message = calloc(2,sizeof(Message));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -678,10 +678,10 @@ Chat* telegram_parse_chat(char *str,int  *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	chat = calloc(1,sizeof(Chat));
+	chat = calloc(2,sizeof(Chat));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -742,10 +742,10 @@ Sticker* telegram_parse_sticker(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	sticker = calloc(1,sizeof(Sticker));
+	sticker = calloc(2,sizeof(Sticker));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -805,14 +805,14 @@ Sticker* telegram_parse_sticker(char *str,int *count)	{
 }
 
 PhotoSize* telegram_parse_photosize(char *str,int *count)	{
-	PhotoSize *photosize;
+	PhotoSize *photosize = NULL;
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	photosize = calloc(1,sizeof(PhotoSize));
+	photosize = calloc(2,sizeof(PhotoSize));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -862,6 +862,7 @@ PhotoSize* telegram_parse_photosize(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return photosize;
@@ -872,11 +873,12 @@ Photos* telegram_parse_photos(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *value;
-	photos = calloc(1,sizeof(Photos));
-	photos->item = calloc(1,sizeof(PhotoSize *));
+	photos = calloc(2,sizeof(Photos));
+	photos->length = 0;
+	photos->item = calloc(2,sizeof(PhotoSize *));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -889,7 +891,7 @@ Photos* telegram_parse_photos(char *str,int *count)	{
 				state = parse_array_states[state][toks[i].type];
 				photos->item[photos->length] = telegram_parse_photosize(value,&i);
 				photos->length++;
-				photos->item = realloc(photos->item,photos->length+1 * sizeof(PhotoSize*));
+				photos->item = realloc(photos->item,(photos->length+2) * sizeof(PhotoSize*));
 			break;		
 			case 4:
 				telegram_dump_token(toks[i],str);
@@ -909,10 +911,10 @@ Voice* telegram_parse_voice(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	voice = calloc(1,sizeof(Voice));
+	voice = calloc(2,sizeof(Voice));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -968,10 +970,10 @@ Location* telegram_parse_location(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	location = calloc(1,sizeof(Location));
+	location = calloc(2,sizeof(Location));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -1020,10 +1022,10 @@ Contact* telegram_parse_contact(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	contact = calloc(1,sizeof(Contact));
+	contact = calloc(2,sizeof(Contact));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -1079,10 +1081,10 @@ Document* telegram_parse_document(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	document = calloc(1,sizeof(Document));
+	document = calloc(2,sizeof(Document));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -1146,10 +1148,10 @@ Video * telegram_parse_video(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	video = calloc(1,sizeof(Video));
+	video = calloc(2,sizeof(Video));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -1223,12 +1225,12 @@ int telegram_init(char *token)	{
 	size = strlen(token);
 	telegram_token = calloc(size,sizeof(char));
 	if(telegram_token == NULL)	{
-		fprintf(stderr, "realloc() failed\n");
+		fprintf(stderr, "calloc() failed\n");
 		exit(1);
 	}
 	telegram_buffer = calloc(telegram_buffer_size,sizeof(char));
 	if(telegram_buffer == NULL)	{
-		fprintf(stderr, "realloc() failed\n");
+		fprintf(stderr, "cealloc() failed\n");
 		exit(1);
 	}
 	memcpy(telegram_token,token,size);
@@ -1256,7 +1258,7 @@ char* telegram_build_post(char **variables,char **values)	{
 		}
 	}
 	//printf("size = %i\nl = %i\n",size,l);
-	buffer = calloc(size,sizeof(char));
+	buffer = calloc(size+1,sizeof(char));
 	if(buffer)	{
 		while(i<l)	{
 			if(i==0)	{
@@ -1282,10 +1284,10 @@ File* telegram_parse_file(char *str,int *count)	{
 	int r,n =1,c,i = 0;
 	unsigned int state = 0,entrar = 1;
 	char *variable,*value;
-	file = calloc(1,sizeof(File));
+	file = calloc(2,sizeof(File));
 	jsmntok_t *toks;
 	jsmn_parser parser;
-	toks = calloc(n,sizeof(jsmntok_t));
+	toks = calloc(n+1,sizeof(jsmntok_t));
 	r = telegram_jsmn_init(&parser,&toks,str,&n);
 	while(entrar && i < r)	{
 		switch(state)	{
@@ -1631,6 +1633,7 @@ void telegram_free_photos(Photos *photos)	{
 				telegram_free_photosize(photos->item[i]);
 			i++;
 		}
+		free(photos->item);
 		memset(photos,0,sizeof(Photos));
 		free(photos);
 	}

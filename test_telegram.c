@@ -13,10 +13,11 @@ int main()	{
 	File *file;
 	int i = 0;
 	char *filename;
-	telegram_init("0123456789:qwertyuiopasdfgjklxcvbnm");
+	telegram_init("1234567:fghjkl45678xcvbkcvbnzsxdcfvgbh");
 	user = telegram_getMe();
 	if(!telegram_is_error())	{
 		printf("User: id: %i\nusername: %s\n",user->id,user->username);
+		telegram_free_user(user);
 	}
 	else	{
 		printf("%s\n",telegram_get_error());
@@ -38,6 +39,7 @@ int main()	{
 			}
 			i++;
 		}
+		telegram_free_updates(updates);
 	}
 	else	{
 		printf("%s\n",telegram_get_error());
