@@ -133,7 +133,14 @@ typedef struct	{
 	Update **list;
 }Updates;
 
+typedef struct	{
+	char *file_id;
+	int file_size;
+	char *file_path;
+}File;
+
 typedef enum {
+	TELEGRAM_ERROR_CURL_= 1,
 	TELEGRAM_ERROR_API_RESPONSE = -10,
 	TELEGRAM_ERROR_DEVELOPER = -20,
 	TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE  = -30,
@@ -153,10 +160,8 @@ void telegram_dump_token(jsmntok_t token,char *str);
 char *telegram_makeurl(char *telegram_method);
 char *telegram_get_error();
 int telegram_is_error();
-
-CURL *curl;
-CURLcode res;
-
+char* telegram_build_post(char **variables,char **values);
+File* telegram_getFile(char *file_id);
 
 int telegram_reset_buffer();
 size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata );
@@ -181,5 +186,9 @@ Location* telegram_parse_location(char *str,int *count);
 Contact* telegram_parse_contact(char *str,int *count);
 Document* telegram_parse_document(char *str,int *count);
 Video* telegram_parse_video(char *str,int *count);
+File* telegram_parse_file(char *str,int *count);
+char* telegram_downloadFile(File *file,char *name);
+char* telegram_process_slash(char *str);
+CURL* telegram_curl_init();
 
 #endif /* __TBOT_H_ */

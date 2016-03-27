@@ -10,8 +10,10 @@
 int main()	{
 	Updates *updates;
 	User *user;
+	File *file;
 	int i = 0;
-	telegram_init("0123456789:qwertyuiopdfghjkl");
+	char *filename;
+	telegram_init("0123456789:qwertyuiopasdfgjklxcvbnm");
 	user = telegram_getMe();
 	if(!telegram_is_error())	{
 		printf("User: id: %i\nusername: %s\n",user->id,user->username);
@@ -23,7 +25,17 @@ int main()	{
 	if(!telegram_is_error()){
 		printf("updates: %i\n",updates->length);
 		while(i < updates->length)	{
-			printf("Mensaje from %s (%i) @ chat: %i\n%s\n",updates->list[i]->item.message->from->username,updates->list[i]->item.message->from->id,updates->list[i]->item.message->chat->id,updates->list[i]->item.message->text);
+			if(updates->list[i]->item.message->document)	{
+				printf("Document exits file_id : %s\n",updates->list[i]->item.message->document->file_id);
+				file = telegram_getFile(updates->list[i]->item.message->document->file_id);
+				if(!telegram_is_error())	{
+					filename = telegram_downloadFile(file,updates->list[i]->item.message->document->file_name);
+					printf("file name : %s\n",filename);
+				}
+				else	{
+					printf("%s\n",telegram_get_error());
+				}
+			}
 			i++;
 		}
 	}
@@ -32,3 +44,4 @@ int main()	{
 	}
 	return 0;
 }
+

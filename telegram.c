@@ -12,6 +12,7 @@ char *telegram_buffer;
 int telegram_buffer_size = 1024;
 int telegram_buffer_offset = 0;
 char *telegram_baseurl = "https://api.telegram.org/bot";
+char *telegram_fileurl = "https://api.telegram.org/file/bot";
 char *telegram_token;
 int telegram_error = 0;
 int telegram_error_code = 0;
@@ -36,6 +37,7 @@ char *video_names[] = {"file_id","width","height","duration","thumb","mime_type"
 char *response_names[] = {"ok","description","result","error_code",NULL};
 char *user_names[] = {"id","first_name","last_name","username",NULL};
 char *update_names[] = {"update_id","message","inline_query","chosen_inline_result",NULL};
+char *file_names[] = {"file_id","file_size","file_path",NULL};
 
 int message_states[3][5] = {{4,1,4,4,4},{4,4,4,2,4},{4,1,1,1,1}};
 int parse_array_states[2][5] = {{4,4,1,4,4},{4,1,4,4,4}};
@@ -210,24 +212,69 @@ void telegram_dump_token(jsmntok_t token,char *str)	{
 }
 
 User* telegram_getMe()	{
+	CURL *curl;
+	CURLcode res;
 	Response *response = NULL;
 	User *user = NULL;
 	char *url = NULL;
 	int i;
 	url = telegram_makeurl("/getMe");
+	curl = telegram_curl_init();
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	res = curl_easy_perform(curl);
 	free(url);
-	if(res != CURLE_OK)	{
-		fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
+	if(res == CURLE_OK)	{
+		response = telegram_parse_response(telegram_buffer,&i);
+		if(!telegram_error)	{
+			user = telegram_parse_user(response->result,&i);
+		}
+		telegram_free_response(response);
+		telegram_reset_buffer();
+		curl_easy_cleanup(curl);
 	}
-	response = telegram_parse_response(telegram_buffer,&i);
-	if(!telegram_error)	{
-		user = telegram_parse_user(response->result,&i);
+	else	{
+		telegram_set_error("curl: curl_easy_perform()",-1000);
 	}
-	telegram_free_response(response);
-	telegram_reset_buffer();
 	return user;
+}
+
+File* telegram_getFile(char *file_id)	{
+	CURL *curl;
+	CURLcode res;
+	Response *response = NULL;
+	File *file = NULL;
+	char *url = NULL;
+	char *postdata = NULL;
+	char *variables[] = {"file_id",NULL};
+	char *values[] = {file_id,NULL};
+	int i;
+	//printf("entrando %s\n",file_id);
+	if(file_id){
+		curl = telegram_curl_init();
+		url = telegram_makeurl("/getFile");
+		curl_easy_setopt(curl, CURLOPT_URL, url);
+		postdata = telegram_build_post(variables,values);
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postdata);
+		res = curl_easy_perform(curl);
+		free(url);
+		if(res == CURLE_OK)	{
+			response = telegram_parse_response(telegram_buffer,&i);
+			if(!telegram_error)	{	
+				file = telegram_parse_file(response->result,&i);
+			}
+			telegram_free_response(response);
+			telegram_reset_buffer();
+		}
+		else	{
+			telegram_set_error("curl_easy_perform() failed!",-1000);	
+		}
+		free(postdata);
+		curl_easy_cleanup(curl);
+	}
+	else	{
+		telegram_set_error("NULL file_id",-10);
+	}
+	return file;
 }
 
 char *telegram_makeurl(char *telegram_method)	{
@@ -340,18 +387,17 @@ off_t fsize(const char *filename) {
 }
 
 Updates * telegram_getUpdates()	{
+	CURL *curl;
+	CURLcode res;
 	Response *response = NULL;
 	Updates *updates = NULL;
 	char *url = telegram_makeurl("/getUpdates");
 	int i;
+	curl = telegram_curl_init();
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	res = curl_easy_perform(curl);
 	free(url);
-	if(res != CURLE_OK)	{
-		telegram_set_error("jsmn_parse: truncated JSON string",JSMN_ERROR_INVAL);
-		fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
-	}
-	else	{
+	if(res == CURLE_OK)	{
 		response = telegram_parse_response(telegram_buffer,&i);
 		if(!telegram_error)	{
 			if(response && response->result){
@@ -359,6 +405,11 @@ Updates * telegram_getUpdates()	{
 			}
 		}
 		telegram_free_response(response);
+		telegram_reset_buffer();
+		curl_easy_cleanup(curl);
+	}
+	else	{
+		telegram_set_error("curl: curl_easy_perform()",-1000);
 	}
 	return updates;
 }
@@ -1184,16 +1235,7 @@ int telegram_init(char *token)	{
 		exit(1);
 	}
 	memcpy(telegram_token,token,size);
-	curl_global_init(CURL_GLOBAL_DEFAULT);
-	curl = curl_easy_init();
-	if(curl) {
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
-		return 1;
-	}
-	else	{
-		return 0;
-	}
+	return 0;
 }
 
 char *telegram_get_error()	{
@@ -1203,5 +1245,191 @@ char *telegram_get_error()	{
 
 int telegram_is_error()	{
 	return telegram_error;
+}
+
+char* telegram_build_post(char **variables,char **values)	{
+	int i = 0,l = 0,size= 0,offset = 0;
+	char *buffer = NULL;
+	//printf("%X %X\n",variables,values);
+	if(variables && values)	{
+		while( variables[l] && values[l])	{
+			//printf("%x %x\n",variables[l],values[l]);
+			size += (strlen(variables[l])+ strlen(values[l])+2);
+			l++;
+		}
+	}
+	//printf("size = %i\nl = %i\n",size,l);
+	buffer = calloc(size,sizeof(char));
+	if(buffer)	{
+		while(i<l)	{
+			if(i==0)	{
+				sprintf(buffer+offset,"%s=%s",variables[i],values[i]);
+				offset+= (1 +strlen(variables[i]) +strlen(values[i]));
+			}
+			else	{
+				sprintf(buffer+offset,"&%s=%s",variables[i],values[i]);
+				offset+= (1 +strlen(variables[i]) +strlen(values[i]));
+			}
+			i++;
+		}
+	}
+	else	{
+		fprintf(stderr,"error callo()");
+		exit(0);
+	}
+	return buffer;
+}
+
+File* telegram_parse_file(char *str,int *count)	{
+	File *file;
+	int r,n =1,c,i = 0;
+	unsigned int state = 0,entrar = 1;
+	char *variable,*value;
+	file = calloc(1,sizeof(File));
+	jsmntok_t *toks;
+	jsmn_parser parser;
+	toks = calloc(n,sizeof(jsmntok_t));
+	r = telegram_jsmn_init(&parser,&toks,str,&n);
+	while(entrar && i < r)	{
+		switch(state)	{
+			case 0:
+				state = message_states[state][toks[i].type];
+				i++;
+			break;
+			case 1:
+				variable = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				i++;
+			break;		
+			case 2:
+				value = telegram_jsmn_get_token(toks[i],str);
+				state = message_states[state][toks[i].type];
+				c = indexOf(variable,file_names);
+				switch(c)	{
+					case 0: 
+						file->file_id = value;
+						i++;
+					break;
+					case 1:
+						file->file_size = strtol(value,NULL,10);
+						free(value);
+						i++;
+					break;
+					case 2:
+						file->file_path = value;
+						free(value);
+						i++;
+					break;
+					default:
+						telegram_set_error("UNEXPECTED TOKEN VALUE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_VALUE);
+						entrar = 0;
+					break;
+				}
+				free(variable);
+			break;
+			case 4:
+				telegram_set_error("UNEXPECTED TOKEN TYPE",TELEGRAM_ERROR_UNEXPECTED_TOKEN_TYPE);
+				entrar = 0;
+			break;
+		}
+	}
+	free(toks);
+	count[0]+=r;
+	return file;
+	
+}
+
+char* telegra_makeDownloadURL(File *file)	{
+	char *url = NULL;
+	char *temp = NULL;
+	int l;
+	int size_base;
+	int size_token;
+	int size_path;
+	size_base = strlen(telegram_fileurl);
+	size_token = strlen(telegram_token);
+	size_path = strlen(file->file_path);
+	l = size_base + size_token + size_path;
+	temp = calloc(l+10,sizeof(char));
+	if(temp)	{
+		snprintf(temp,l+3,"%s%s/%s",telegram_fileurl,telegram_token,file->file_path);
+		url = telegram_process_slash(temp);
+		free(temp);
+	}
+	else	{
+		fprintf(stderr,"calloc error\n");
+		exit(1);
+	}
+	return url;
+}
+
+char* telegram_downloadFile(File *file,char *name)	{
+	CURL *curl;
+	CURLcode res;
+	char *toreturn = NULL;
+	FILE *toLocalFile = NULL;
+	char **test = NULL;
+	char *url = telegra_makeDownloadURL(file);
+	curl = telegram_curl_init();
+	curl_easy_setopt(curl, CURLOPT_URL, url);
+	res = curl_easy_perform(curl);
+	free(url);
+	if(res == CURLE_OK)	{
+		if(file->file_size == telegram_buffer_offset)	{
+			toLocalFile = fopen(name,"w");
+			if(toLocalFile)	{
+				if(fwrite(telegram_buffer,sizeof(char),telegram_buffer_offset,toLocalFile) == telegram_buffer_offset)	{
+					toreturn = name;
+				}			
+				else	{
+					telegram_set_error("stdio: fwrite()",-1000);	
+				}
+				fclose(toLocalFile);
+			}
+			else	{
+				telegram_set_error("stdio: fopen()",-1000);	
+			}
+			telegram_reset_buffer();
+		}
+		else	{
+			printf("Diff %i %i\n",file->file_size,telegram_buffer_offset);
+		}
+		curl_easy_cleanup(curl);
+	}
+	else	{
+		telegram_set_error("curl: curl_easy_perform()",-1000);
+	}
+	return toreturn;
+}
+
+char* telegram_process_slash(char *str)	{
+	int i = 0;
+	char *temp = NULL;
+	if(str)	{
+		temp = calloc(strlen(str)+2,sizeof(char));
+		while(*str != 0)	{ // '\0'
+			if(*str == '\\')
+				*str++;
+			temp[i] = *str;
+			i++;
+			*str++;
+		}
+	}	
+	else	{
+		telegram_set_error("NULL funtion argument",-10);	
+	}
+	return temp;
+}
+
+CURL* telegram_curl_init()	{
+	CURL *curl  = NULL;
+	//printf("CURL INIT\n");
+	curl_global_init(CURL_GLOBAL_DEFAULT);
+	curl = curl_easy_init();
+	if(curl) {
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
+	}
+	return curl;
 }
 
