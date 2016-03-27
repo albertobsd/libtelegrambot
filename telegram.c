@@ -7,7 +7,6 @@
 #include"telegram.h"
 #include"jsmn.h"
 
-
 char *telegram_buffer;
 int telegram_buffer_size = 1024;
 int telegram_buffer_offset = 0;
@@ -142,7 +141,7 @@ int telegram_set_error(char *error_str,int error_code)	{
 	return 0;
 }
 
-int telegram_free_response(Response *res)	{
+void telegram_free_response(Response *res)	{
 	if(res)	{
 		if(res->ok)	{
 			free(res->ok);
@@ -156,10 +155,9 @@ int telegram_free_response(Response *res)	{
 		res->error_code = 0;
 		free(res);
 	}
-	return 0;
 }
 
-int telegram_free_user(User *user)	{
+void telegram_free_user(User *user)	{
 	if(user->username != NULL)	{
 		free(user->username);
 	}
@@ -171,7 +169,6 @@ int telegram_free_user(User *user)	{
 	}
 	user->id = 0;
 	free(user);
-	return 0;
 }
 
 int indexOf(char *str,char **ptr_strings)	{
@@ -1431,5 +1428,227 @@ CURL* telegram_curl_init()	{
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
 	}
 	return curl;
+}
+
+void telegram_free_updates(Updates *updates)	{
+	int i = 0;
+	if(updates)	{
+		while(i < updates->length)	{
+			if(updates->list[i])
+				telegram_free_update(updates->list[i]);
+			i++;
+		}
+		memset(updates,0,sizeof(Updates));
+		free(updates);
+	}
+}
+
+void telegram_free_update(Update *update)	{
+	if(update)	{
+		switch(update->type)	{
+			case 0:
+				telegram_free_message(update->item.message);
+			break;
+		}
+		memset(update,0,sizeof(Update));
+		free(update);
+	}
+}
+
+void telegram_free_message(Message *message)	{
+	if(message)	{
+		if(message->from)	{
+			telegram_free_user(message->from);
+		}
+		if(message->chat)	{
+			telegram_free_chat(message->chat);
+		}
+		if(message->forward_from)	{
+			telegram_free_user(message->forward_from);
+		}
+		if(message->reply_to_message)	{
+			telegram_free_message(message->reply_to_message);
+		}
+		if(message->audio)	{
+			telegram_free_audio(message->audio);
+		}
+		if(message->document)	{
+			telegram_free_document(message->document);
+		}
+		if(message->photo)	{
+			telegram_free_photos(message->photo);
+		}
+		if(message->sticker)	{
+			telegram_free_sticker(message->sticker);
+		}
+		if(message->video)	{
+			telegram_free_video(message->video);
+		}
+		if(message->voice)	{
+			telegram_free_voice(message->voice);
+		}
+		if(message->contact)	{
+			telegram_free_contact(message->contact);
+		}
+		if(message->location)	{
+			telegram_free_location(message->location);
+		}
+		if(message->new_chat_participant)	{
+			telegram_free_user(message->new_chat_participant);
+		}
+		if(message->left_chat_participant)	{
+			telegram_free_user(message->left_chat_participant);
+		}
+		if(message->new_chat_photo)	{
+			telegram_free_photos(message->new_chat_photo);
+		}
+		memset(message,0,sizeof(Message));
+		free(message);
+	}
+}
+
+void telegram_free_location(Location *location)	{
+	if(location)	{
+		memset(location,0,sizeof(Location));
+		free(location);
+	}
+}
+
+void telegram_free_voice(Voice *voice)	{
+	if(voice)	{
+		if(voice->file_id)	{
+			free(voice->file_id);
+		}
+		if(voice->mime_type)	{
+			free(voice->mime_type);
+		}
+		memset(voice,0,sizeof(Voice));
+		free(voice);
+	}
+}
+
+void telegram_free_contact(Contact *contact)	{
+	if(contact)	{
+		if(contact->phone_number)	{
+			free(contact->phone_number);
+		}
+		if(contact->first_name)	{
+			free(contact->first_name);
+		}
+		if(contact->last_name)	{
+			free(contact->last_name);
+		}
+		memset(contact,0,sizeof(Contact));
+		free(contact);
+	}
+}
+
+void telegram_free_document(Document *document)	{
+	if(document)	{
+		if(document->file_id)	{
+			free(document->file_id);
+		}
+		if(document->mime_type)	{
+			free(document->mime_type);
+		}
+		if(document->file_name)	{
+			free(document->file_name);
+		}
+		if(document->thumb)	{
+			telegram_free_photosize(document->thumb);
+		}
+		memset(document,0,sizeof(Document));
+		free(document);
+	}
+}
+
+void telegram_free_chat(Chat *chat)	{
+	if(chat)	{
+		if(chat->title)	{
+			free(chat->title);
+		}
+		if(chat->username)	{
+			free(chat->username);
+		}
+		if(chat->first_name)	{
+			free(chat->first_name);
+		}
+		if(chat->last_name)	{
+			free(chat->last_name);
+		}
+		memset(chat,0,sizeof(Chat));
+		free(chat);
+	}
+}
+
+void telegram_free_audio(Audio *audio)	{
+	if(audio)	{
+		if(audio->file_id)	{
+			free(audio->file_id);
+		}
+		if(audio->performer)	{
+			free(audio->performer);
+		}
+		if(audio->title)	{
+			free(audio->title);
+		}
+		if(audio->mime_type)	{
+			free(audio->mime_type);
+		}
+		memset(audio,0,sizeof(Audio));
+		free(audio);
+	}
+}
+
+void telegram_free_sticker(Sticker *sticker)	{
+	if(sticker)	{
+		if(sticker->file_id)	{
+			free(sticker->file_id);
+		}
+		if(sticker->thumb)	{
+			telegram_free_photosize(sticker->thumb);
+		}
+		memset(sticker,0,sizeof(Sticker));
+		free(sticker);
+	}
+}
+
+void telegram_free_photosize(PhotoSize *photosize)	{
+	if(photosize)	{
+		if(photosize->file_id)	{
+			free(photosize->file_id);
+		}
+		memset(photosize,0,sizeof(PhotoSize));
+		free(photosize);
+	}
+}
+
+void telegram_free_photos(Photos *photos)	{
+	int i = 0;
+	if(photos)	{
+		while(i < photos->length)	{
+			if(photos->item[i])
+				telegram_free_photosize(photos->item[i]);
+			i++;
+		}
+		memset(photos,0,sizeof(Photos));
+		free(photos);
+	}
+}
+
+void telegram_free_video(Video *video)	{
+	if(video)	{
+		if(video->file_id)	{
+			free(video->file_id);
+		}
+		if(video->mime_type)	{
+			free(video->mime_type);
+		}
+		if(video->thumb)	{
+			telegram_free_photosize(video->thumb);
+		}
+		memset(video,0,sizeof(Video));
+		free(video);
+	}
 }
 

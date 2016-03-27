@@ -139,6 +139,15 @@ typedef struct	{
 	char *file_path;
 }File;
 
+typedef struct {
+	char *file_id;
+	int duration;
+	char *performer;
+	char *title;
+	char *mime_type;
+	int file_size;
+}Audio;
+
 typedef enum {
 	TELEGRAM_ERROR_CURL_= 1,
 	TELEGRAM_ERROR_API_RESPONSE = -10,
@@ -149,12 +158,34 @@ typedef enum {
 }telegram_error_t;
 
 
+
+
+/*
+ * free telegram variables funtions
+ */
+
+void telegram_free_response(Response *res);
+void telegram_free_user(User *user);
+void telegram_free_update(Update *update);
+void telegram_free_updates(Updates *updates);
+void telegram_free_message(Message *message);
+void telegram_free_document(Document *document);
+void telegram_free_video(Video *video);
+void telegram_free_voice(Voice *voice);
+void telegram_free_audio(Audio *audio);
+void telegram_free_sticker(Sticker *sticker);
+void telegram_free_chat(Chat *chat);
+void telegram_free_photos(Photos *photos);
+void telegram_free_contact(Contact *contact);
+void telegram_free_location(Location *location);
+void telegram_free_photosize(PhotoSize *photosize);
+
+
+
 int telegram_init(char *);
 int indexOf(char *str,char **ptr_strings);
 int telegram_jsmn_init(jsmn_parser *parser,jsmntok_t **t,char *buffer,int *n);
 int telegram_set_error(char *error_str,int error_code);
-int telegram_free_response(Response *res);
-int telegram_free_user(User *user);
 char * telegram_jsmn_get_token(jsmntok_t token,char *full);
 void telegram_dump_token(jsmntok_t token,char *str);
 char *telegram_makeurl(char *telegram_method);
@@ -166,7 +197,6 @@ File* telegram_getFile(char *file_id);
 int telegram_reset_buffer();
 size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata );
 off_t fsize(const char *filename);
-
 
 User * telegram_getMe();
 Updates * telegram_getUpdates();
@@ -190,5 +220,6 @@ File* telegram_parse_file(char *str,int *count);
 char* telegram_downloadFile(File *file,char *name);
 char* telegram_process_slash(char *str);
 CURL* telegram_curl_init();
+
 
 #endif /* __TBOT_H_ */
