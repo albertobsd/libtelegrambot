@@ -109,6 +109,7 @@ Response *telegram_parse_response(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return response;
@@ -356,6 +357,7 @@ User* telegram_parse_user(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0] += r;
 	return user;
@@ -452,6 +454,7 @@ Updates * telegram_parse_updates(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r; 
 	return updates;
@@ -513,6 +516,7 @@ Update * telegram_parse_update(char *str,int *count)	{
 		}
 
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+= r;	
 	return update;
@@ -678,6 +682,7 @@ Message* telegram_parse_message(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return message;
@@ -742,6 +747,7 @@ Chat* telegram_parse_chat(char *str,int  *count)	{
 
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
  	return chat;	
@@ -809,6 +815,7 @@ Sticker* telegram_parse_sticker(char *str,int *count)	{
 
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return sticker;
@@ -910,6 +917,7 @@ Photos* telegram_parse_photos(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+= r;
 	return photos;
@@ -970,6 +978,7 @@ Voice* telegram_parse_voice(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return voice;
@@ -1022,6 +1031,7 @@ Location* telegram_parse_location(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return location;
@@ -1080,6 +1090,7 @@ Contact* telegram_parse_contact(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return contact;
@@ -1148,6 +1159,7 @@ Document* telegram_parse_document(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return document;
@@ -1225,6 +1237,7 @@ Video * telegram_parse_video(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return video;
@@ -1342,6 +1355,7 @@ File* telegram_parse_file(char *str,int *count)	{
 			break;
 		}
 	}
+	memset(toks,0,n*sizeof(jsmntok_t));
 	free(toks);
 	count[0]+=r;
 	return file;
@@ -1412,16 +1426,16 @@ char* telegram_downloadFile(File *file,char *name)	{
 }
 
 char* telegram_process_slash(char *str)	{
-	int i = 0;
+	int i = 0,j =0;
 	char *temp = NULL;
 	if(str)	{
 		temp = calloc(strlen(str)+2,sizeof(char));
-		while(*str != 0)	{ // '\0'
-			if(*str == '\\')
-				*str++;
-			temp[i] = *str;
+		while(str[j] != 0)	{ // '\0'
+			if(str[j] == '\\')
+				j++;
+			temp[i] = str[j];
 			i++;
-			*str++;
+			j++;
 		}
 	}	
 	else	{
