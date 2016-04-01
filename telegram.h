@@ -1,3 +1,9 @@
+/*
+ * Luis Alberto 
+ * Twitter @albertobsd
+ */
+
+
 #ifndef __TBOT_H_
 #define __TBOT_H_
 
@@ -164,21 +170,21 @@ typedef enum {
  * free telegram variables funtions
  */
 
-void telegram_free_response(Response *res);
-void telegram_free_user(User *user);
-void telegram_free_update(Update *update);
-void telegram_free_updates(Updates *updates);
-void telegram_free_message(Message *message);
-void telegram_free_document(Document *document);
-void telegram_free_video(Video *video);
-void telegram_free_voice(Voice *voice);
-void telegram_free_audio(Audio *audio);
-void telegram_free_sticker(Sticker *sticker);
-void telegram_free_chat(Chat *chat);
-void telegram_free_photos(Photos *photos);
-void telegram_free_contact(Contact *contact);
-void telegram_free_location(Location *location);
-void telegram_free_photosize(PhotoSize *photosize);
+Response* telegram_free_response(Response *res);
+User* telegram_free_user(User *user);
+Update* telegram_free_update(Update *update);
+Updates* telegram_free_updates(Updates *updates);
+Message* telegram_free_message(Message *message);
+Document* telegram_free_document(Document *document);
+Video* telegram_free_video(Video *video);
+Voice* telegram_free_voice(Voice *voice);
+Audio* telegram_free_audio(Audio *audio);
+Sticker* telegram_free_sticker(Sticker *sticker);
+Chat* telegram_free_chat(Chat *chat);
+Photos* telegram_free_photos(Photos *photos);
+Contact* telegram_free_contact(Contact *contact);
+Location* telegram_free_location(Location *location);
+PhotoSize* telegram_free_photosize(PhotoSize *photosize);
 
 
 
@@ -192,15 +198,26 @@ char *telegram_makeurl(char *telegram_method);
 char *telegram_get_error();
 int telegram_is_error();
 char* telegram_build_post(char **variables,char **values);
-File* telegram_getFile(char *file_id);
+
 
 int telegram_reset_buffer();
 size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata );
 off_t fsize(const char *filename);
 
+/*
+ * Telegram API methods
+ */
+
 User * telegram_getMe();
 Updates * telegram_getUpdates();
-Updates * telegram_getUpdates();
+Message* telegram_sendMessage(char *postdata);
+File* telegram_getFile(char *file_id);
+Message* telegram_sendDocument(char *filename,char **variables, char **valores);
+
+
+/*
+ * Telegram parse
+ */
 
 User * telegram_parse_user(char *str,int *count);
 Response* telegram_parse_response(char *str,int *count);

@@ -148,7 +148,7 @@ int telegram_set_error(char *error_str,int error_code)	{
 	return 0;
 }
 
-void telegram_free_response(Response *res)	{
+Response* telegram_free_response(Response *res)	{
 	if(res)	{
 		if(res->ok)	{
 			free(res->ok);
@@ -159,23 +159,27 @@ void telegram_free_response(Response *res)	{
 		if(res->description)	{
 			free(res->description);
 		}
-		res->error_code = 0;
+		memset(res,0,sizeof(Response));
 		free(res);
 	}
+	return NULL;
 }
 
-void telegram_free_user(User *user)	{
-	if(user->username != NULL)	{
-		free(user->username);
+User* telegram_free_user(User *user)	{
+	if(user)	{
+		if(user->username != NULL)	{
+			free(user->username);
+		}
+		if(user->first_name != NULL)	{
+			free(user->first_name);
+		}
+		if(user->last_name != NULL)	{
+			free(user->last_name);
+		}
+		memset(user,0,sizeof(User));
+		free(user);
 	}
-	if(user->first_name != NULL)	{
-		free(user->first_name);
-	}
-	if(user->last_name != NULL)	{
-		free(user->last_name);
-	}
-	user->id = 0;
-	free(user);
+	return NULL;
 }
 
 int indexOf(char *str,char **ptr_strings)	{
@@ -1438,9 +1442,9 @@ CURL* telegram_curl_init()	{
 	return curl;
 }
 
-void telegram_free_updates(Updates *updates)	{
-	int i = 0;
+Updates* telegram_free_updates(Updates *updates)	{
 	if(updates)	{
+		int i = 0;
 		while(i < updates->length)	{
 			if(updates->list[i])
 				telegram_free_update(updates->list[i]);
@@ -1449,9 +1453,10 @@ void telegram_free_updates(Updates *updates)	{
 		memset(updates,0,sizeof(Updates));
 		free(updates);
 	}
+	return NULL;
 }
 
-void telegram_free_update(Update *update)	{
+Update* telegram_free_update(Update *update)	{
 	if(update)	{
 		switch(update->type)	{
 			case 0:
@@ -1461,9 +1466,10 @@ void telegram_free_update(Update *update)	{
 		memset(update,0,sizeof(Update));
 		free(update);
 	}
+	return NULL;
 }
 
-void telegram_free_message(Message *message)	{
+Message* telegram_free_message(Message *message)	{
 	if(message)	{
 		if(message->from)	{
 			telegram_free_user(message->from);
@@ -1513,16 +1519,18 @@ void telegram_free_message(Message *message)	{
 		memset(message,0,sizeof(Message));
 		free(message);
 	}
+	return NULL;
 }
 
-void telegram_free_location(Location *location)	{
+Location* telegram_free_location(Location *location)	{
 	if(location)	{
 		memset(location,0,sizeof(Location));
 		free(location);
 	}
+	return NULL;
 }
 
-void telegram_free_voice(Voice *voice)	{
+Voice* telegram_free_voice(Voice *voice)	{
 	if(voice)	{
 		if(voice->file_id)	{
 			free(voice->file_id);
@@ -1533,9 +1541,10 @@ void telegram_free_voice(Voice *voice)	{
 		memset(voice,0,sizeof(Voice));
 		free(voice);
 	}
+	return NULL;
 }
 
-void telegram_free_contact(Contact *contact)	{
+Contact* telegram_free_contact(Contact *contact)	{
 	if(contact)	{
 		if(contact->phone_number)	{
 			free(contact->phone_number);
@@ -1549,9 +1558,10 @@ void telegram_free_contact(Contact *contact)	{
 		memset(contact,0,sizeof(Contact));
 		free(contact);
 	}
+	return NULL;
 }
 
-void telegram_free_document(Document *document)	{
+Document* telegram_free_document(Document *document)	{
 	if(document)	{
 		if(document->file_id)	{
 			free(document->file_id);
@@ -1568,9 +1578,10 @@ void telegram_free_document(Document *document)	{
 		memset(document,0,sizeof(Document));
 		free(document);
 	}
+	return NULL;
 }
 
-void telegram_free_chat(Chat *chat)	{
+Chat* telegram_free_chat(Chat *chat)	{
 	if(chat)	{
 		if(chat->title)	{
 			free(chat->title);
@@ -1587,9 +1598,10 @@ void telegram_free_chat(Chat *chat)	{
 		memset(chat,0,sizeof(Chat));
 		free(chat);
 	}
+	return NULL;
 }
 
-void telegram_free_audio(Audio *audio)	{
+Audio* telegram_free_audio(Audio *audio)	{
 	if(audio)	{
 		if(audio->file_id)	{
 			free(audio->file_id);
@@ -1606,9 +1618,10 @@ void telegram_free_audio(Audio *audio)	{
 		memset(audio,0,sizeof(Audio));
 		free(audio);
 	}
+	return NULL;
 }
 
-void telegram_free_sticker(Sticker *sticker)	{
+Sticker* telegram_free_sticker(Sticker *sticker)	{
 	if(sticker)	{
 		if(sticker->file_id)	{
 			free(sticker->file_id);
@@ -1619,9 +1632,10 @@ void telegram_free_sticker(Sticker *sticker)	{
 		memset(sticker,0,sizeof(Sticker));
 		free(sticker);
 	}
+	return NULL;
 }
 
-void telegram_free_photosize(PhotoSize *photosize)	{
+PhotoSize* telegram_free_photosize(PhotoSize *photosize)	{
 	if(photosize)	{
 		if(photosize->file_id)	{
 			free(photosize->file_id);
@@ -1629,9 +1643,10 @@ void telegram_free_photosize(PhotoSize *photosize)	{
 		memset(photosize,0,sizeof(PhotoSize));
 		free(photosize);
 	}
+	return NULL;
 }
 
-void telegram_free_photos(Photos *photos)	{
+Photos* telegram_free_photos(Photos *photos)	{
 	int i = 0;
 	if(photos)	{
 		while(i < photos->length)	{
@@ -1643,9 +1658,10 @@ void telegram_free_photos(Photos *photos)	{
 		memset(photos,0,sizeof(Photos));
 		free(photos);
 	}
+	return NULL;
 }
 
-void telegram_free_video(Video *video)	{
+Video* telegram_free_video(Video *video)	{
 	if(video)	{
 		if(video->file_id)	{
 			free(video->file_id);
@@ -1659,6 +1675,7 @@ void telegram_free_video(Video *video)	{
 		memset(video,0,sizeof(Video));
 		free(video);
 	}
+	return NULL;
 }
 
 Message* telegram_sendMessage(char *postdata)	{
@@ -1737,3 +1754,33 @@ Message* telegram_sendDocument(char *filename,char **variables, char **valores)	
 	}
 	return 	message;
 }
+
+Message* sendLocation(char postdata)	{
+	CURL *curl = NULL;
+	CURLcode res;
+	Response *response = NULL;
+	Message *message = NULL;
+	int i;
+	char *url = NULL;
+	url = telegram_makeurl("/sendLocation");
+	curl = telegram_curl_init();
+	curl_easy_setopt(curl, CURLOPT_URL , url);
+	curl_easy_setopt(curl,  CURLOPT_POSTFIELDS , postdata);
+	res = curl_easy_perform(curl);
+	free(url);
+	if(res == CURLE_OK)	{
+		response = telegram_parse_response(telegram_buffer,&i);
+		if(!telegram_error)	{
+			message = telegram_parse_message(response->result,&i);
+		}
+		telegram_free_response(response);
+		telegram_reset_buffer();
+		curl_easy_cleanup(curl);
+	}
+	else	{
+		telegram_set_error("curl: curl_easy_perform()",-1000);
+	}
+	return message;		
+
+}
+
