@@ -1,3 +1,9 @@
+/*
+ * Luis Alberto 
+ * Twitter @albertobsd
+ */
+
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -1230,7 +1236,7 @@ int telegram_init(char *token)	{
 	}
 	telegram_buffer = calloc(telegram_buffer_size,sizeof(char));
 	if(telegram_buffer == NULL)	{
-		fprintf(stderr, "cealloc() failed\n");
+		fprintf(stderr, "calloc() failed\n");
 		exit(1);
 	}
 	memcpy(telegram_token,token,size);
@@ -1655,3 +1661,79 @@ void telegram_free_video(Video *video)	{
 	}
 }
 
+Message* telegram_sendMessage(char *postdata)	{
+	CURL *curl = NULL;
+	CURLcode res;
+	Response *response = NULL;
+	Message *message = NULL;
+	int i;
+	char *url = NULL;
+	url = telegram_makeurl("/sendMessage");
+	curl = telegram_curl_init();
+	curl_easy_setopt(curl, CURLOPT_URL , url);
+	curl_easy_setopt(curl,  CURLOPT_POSTFIELDS , postdata);
+	res = curl_easy_perform(curl);
+	free(url);
+	if(res == CURLE_OK)	{
+		response = telegram_parse_response(telegram_buffer,&i);
+		if(!telegram_error)	{
+			message = telegram_parse_message(response->result,&i);
+		}
+		telegram_free_response(response);
+		telegram_reset_buffer();
+		curl_easy_cleanup(curl);
+	}
+	else	{
+		telegram_set_error("curl: curl_easy_perform()",-1000);
+	}
+	return message;		
+}
+
+Message* telegram_sendDocument(char *filename,char **variables, char **valores)	{
+	CURL *curl = NULL;
+	CURLcode res;
+	struct curl_httppost *formpost=NULL;
+	struct curl_httppost *lastptr=NULL;
+	struct curl_slist *headerlist=NULL;
+	static const char buf[] = "Expect:";
+	Response *response = NULL;
+	Message *message = NULL;
+	char *url = NULL;
+	int i;
+	if(filename){
+		url = telegram_makeurl("/sendDocument");
+		curl = telegram_curl_init();
+		i = 0;
+		while(variables[i] != NULL && valores[i] != NULL)	{
+			curl_formadd(&formpost,&lastptr,CURLFORM_COPYNAME, variables[i],CURLFORM_COPYCONTENTS, valores[i],CURLFORM_END);
+			i++;
+		}
+		curl_formadd(&formpost,&lastptr,CURLFORM_COPYNAME, "document",CURLFORM_FILE, filename,CURLFORM_END);
+		headerlist = curl_slist_append(headerlist, buf);
+		curl_easy_setopt(curl, CURLOPT_URL , url);
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
+		curl_easy_setopt(curl, CURLOPT_HTTPPOST, formpost);
+		res = curl_easy_perform(curl);
+		if(res == CURLE_OK)	{
+			response = telegram_parse_response(telegram_buffer,&i);
+			if(!telegram_error)	{
+				message = telegram_parse_message(response->result,&i);
+			}
+			else	{
+				telegram_set_error(response->description,1);
+			}
+			free(url);
+			curl_easy_cleanup(curl);
+			curl_formfree(formpost);
+			curl_slist_free_all (headerlist);
+		}
+		else	{	
+			telegram_set_error("curl",1);
+		}
+
+	}
+	else	{
+		telegram_set_error("NULL argument",1);
+	}
+	return 	message;
+}
